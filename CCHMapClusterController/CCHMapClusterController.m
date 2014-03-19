@@ -273,6 +273,9 @@
     BOOL hasZoomed = !fequal(mapView.region.span.longitudeDelta, self.regionSpanBeforeChange.longitudeDelta);
     if (hasZoomed) {
         [self deselectAllAnnotations];
+        self.reuseExistingClusterAnnotations = NO;
+    } else {
+        self.reuseExistingClusterAnnotations = YES;
     }
     
     // Update annotations
@@ -300,6 +303,8 @@
             [self.mapView selectAnnotation:self.mapClusterAnnotationToSelect animated:YES];
             self.mapClusterAnnotationToSelect = nil;
         }
+        
+        self.reuseExistingClusterAnnotations = YES;
     }];
 }
 
