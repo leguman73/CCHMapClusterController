@@ -35,16 +35,14 @@
 
 @interface CCHMapClusterOperation : NSOperation
 
-@property (nonatomic, copy) void (^completionHandler)();
-
-@property (nonatomic, strong) CCHMapTree *allAnnotationsMapTree;
-@property (nonatomic, strong) CCHMapTree *visibleAnnotationsMapTree;
-@property (nonatomic, strong) id<CCHMapClusterer> clusterer;
-@property (nonatomic, strong) id<CCHMapAnimator> animator;
-@property (nonatomic, weak) id<CCHMapClusterControllerDelegate> delegate;
+@property (nonatomic) CCHMapTree *allAnnotationsMapTree;
+@property (nonatomic) CCHMapTree *visibleAnnotationsMapTree;
+@property (nonatomic) id<CCHMapClusterer> clusterer;
+@property (nonatomic) id<CCHMapAnimator> animator;
+@property (nonatomic, weak) id<CCHMapClusterControllerDelegate> clusterControllerDelegate;
 @property (nonatomic, weak) CCHMapClusterController *clusterController;
 
-- (id)initWithMapView:(MKMapView *)mapView cellSize:(double)cellSize marginFactor:(double)marginFactor reuseExistingClusterAnnotations:(BOOL)reuseExistingClusterAnnotation maxZoomLevelForClustering:(double)maxZoomLevelForClustering;
+- (instancetype)initWithMapView:(MKMapView *)mapView cellSize:(double)cellSize marginFactor:(double)marginFactor reuseExistingClusterAnnotations:(BOOL)reuseExistingClusterAnnotation maxZoomLevelForClustering:(double)maxZoomLevelForClustering minUniqueLocationsForClustering:(NSUInteger)minUniqueLocationsForClustering;
 
 + (double)cellMapSizeForCellSize:(double)cellSize withMapView:(MKMapView *)mapView;
 + (MKMapRect)gridMapRectForMapRect:(MKMapRect)mapRect withCellMapSize:(double)cellMapSize marginFactor:(double)marginFactor;

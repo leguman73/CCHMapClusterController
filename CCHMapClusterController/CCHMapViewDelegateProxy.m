@@ -29,7 +29,7 @@
 
 @interface CCHMapViewDelegateProxy()
 
-@property (nonatomic, strong) NSHashTable *delegates;
+@property (nonatomic) NSHashTable *delegates;
 @property (nonatomic, weak) NSObject<MKMapViewDelegate> *target;
 @property (nonatomic, weak) MKMapView *mapView;
 
@@ -37,7 +37,7 @@
 
 @implementation CCHMapViewDelegateProxy
 
-- (id)initWithMapView:(MKMapView *)mapView delegate:(NSObject<MKMapViewDelegate> *)delegate
+- (instancetype)initWithMapView:(MKMapView *)mapView delegate:(NSObject<MKMapViewDelegate> *)delegate
 {
     self = [super init];
     if (self) {

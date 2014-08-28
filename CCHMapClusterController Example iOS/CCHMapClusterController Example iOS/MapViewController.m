@@ -25,13 +25,13 @@
 
 @property (weak, nonatomic) IBOutlet MKMapView *mapView;
 
-@property (strong, nonatomic) DataReader *dataReader;
-@property (strong, nonatomic) Settings *settings;
-@property (strong, nonatomic) CCHMapClusterController *mapClusterControllerRed;
-@property (strong, nonatomic) CCHMapClusterController *mapClusterControllerBlue;
-@property (assign, nonatomic) NSUInteger count;
-@property (strong, nonatomic) id<CCHMapClusterer> mapClusterer;
-@property (strong, nonatomic) id<CCHMapAnimator> mapAnimator;
+@property (nonatomic) DataReader *dataReader;
+@property (nonatomic) Settings *settings;
+@property (nonatomic) CCHMapClusterController *mapClusterControllerRed;
+@property (nonatomic) CCHMapClusterController *mapClusterControllerBlue;
+@property (nonatomic) NSUInteger count;
+@property (nonatomic) id<CCHMapClusterer> mapClusterer;
+@property (nonatomic) id<CCHMapAnimator> mapAnimator;
 
 @end
 
@@ -70,16 +70,6 @@
 {
     self.settings = settings;
     
-    // Reset
-    self.count = 0;
-    [self.dataReader stopReadingData];
-    [self.mapClusterControllerRed removeAnnotations:self.mapClusterControllerRed.annotations.allObjects withCompletionHandler:NULL];
-    [self.mapClusterControllerBlue removeAnnotations:self.mapClusterControllerBlue.annotations.allObjects withCompletionHandler:NULL];
-    [self.mapView removeAnnotations:self.mapView.annotations];
-    for (id<MKOverlay> overlay in self.mapView.overlays) {
-        [self.mapView removeOverlay:overlay];
-    }
-    
     // Map cluster controller settings
     self.mapClusterControllerRed.debuggingEnabled = settings.isDebuggingEnabled;
     self.mapClusterControllerRed.cellSize = settings.cellSize;
@@ -91,13 +81,36 @@
         self.mapClusterer = [[CCHNearCenterMapClusterer alloc] init];
     }
     self.mapClusterControllerRed.clusterer = self.mapClusterer;
+    self.mapClusterControllerRed.maxZoomLevelForClustering = settings.maxZoomLevelForClustering;
+    self.mapClusterControllerRed.minUniqueLocationsForClustering = settings.minUniqueLocationsForClustering;
 
     if (settings.animator == SettingsAnimatorFadeInOut) {
         self.mapAnimator = [[CCHFadeInOutMapAnimator alloc] init];
     }
     self.mapClusterControllerRed.animator = self.mapAnimator;
     
-    // Region and data
+    // Similar settings for second cluster controller
+    if (settings.isGroupingEnabled) {
+        if (self.mapClusterControllerBlue == nil) {
+            self.mapClusterControllerBlue = [[CCHMapClusterController alloc] initWithMapView:self.mapView];
+            self.mapClusterControllerBlue.delegate = self;
+        }
+        
+        self.mapClusterControllerBlue.debuggingEnabled = settings.isDebuggingEnabled;
+        self.mapClusterControllerBlue.cellSize = settings.cellSize + 20;
+        self.mapClusterControllerBlue.marginFactor = settings.marginFactor;
+        self.mapClusterControllerBlue.clusterer = self.mapClusterer;
+        self.mapClusterControllerBlue.maxZoomLevelForClustering = settings.maxZoomLevelForClustering;
+        self.mapClusterControllerBlue.minUniqueLocationsForClustering = settings.minUniqueLocationsForClustering;
+        self.mapClusterControllerBlue.animator = self.mapAnimator;
+    } else {
+        self.mapClusterControllerBlue = nil;
+    }
+    
+    // Restart data reader
+    self.count = 0;
+    [self.dataReader stopReadingData];
+
     MKCoordinateRegion region;
     if (self.settings.dataSet == SettingsDataSetBerlin) {
         // 5000+ items near Berlin
@@ -112,20 +125,12 @@
     }
     self.mapView.region = region;
     
-    // Similar settings for second cluster controller
-    if (settings.isGroupingEnabled) {
-        if (self.mapClusterControllerBlue == nil) {
-            self.mapClusterControllerBlue = [[CCHMapClusterController alloc] initWithMapView:self.mapView];
-            self.mapClusterControllerBlue.delegate = self;
-        }
-        
-        self.mapClusterControllerBlue.debuggingEnabled = settings.isDebuggingEnabled;
-        self.mapClusterControllerBlue.cellSize = settings.cellSize + 20;
-        self.mapClusterControllerBlue.marginFactor = settings.marginFactor;
-        self.mapClusterControllerBlue.clusterer = self.mapClusterer;
-        self.mapClusterControllerBlue.animator = self.mapAnimator;
-    } else {
-        self.mapClusterControllerBlue = nil;
+    // Remove all current items form the map
+    [self.mapClusterControllerRed removeAnnotations:self.mapClusterControllerRed.annotations.allObjects withCompletionHandler:NULL];
+    [self.mapClusterControllerBlue removeAnnotations:self.mapClusterControllerBlue.annotations.allObjects withCompletionHandler:NULL];
+    [self.mapView removeAnnotations:self.mapView.annotations];
+    for (id<MKOverlay> overlay in self.mapView.overlays) {
+        [self.mapView removeOverlay:overlay];
     }
 }
 
@@ -161,6 +166,7 @@
 {
     ClusterAnnotationView *clusterAnnotationView = (ClusterAnnotationView *)[self.mapView viewForAnnotation:mapClusterAnnotation];
     clusterAnnotationView.count = mapClusterAnnotation.annotations.count;
+    clusterAnnotationView.uniqueLocation = mapClusterAnnotation.isUniqueLocation;
 }
 
 - (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id<MKAnnotation>)annotation
@@ -181,6 +187,7 @@
         CCHMapClusterAnnotation *clusterAnnotation = (CCHMapClusterAnnotation *)annotation;
         clusterAnnotationView.count = clusterAnnotation.annotations.count;
         clusterAnnotationView.blue = (clusterAnnotation.mapClusterController == self.mapClusterControllerBlue);
+        clusterAnnotationView.uniqueLocation = clusterAnnotation.isUniqueLocation;
         annotationView = clusterAnnotationView;
     }
     

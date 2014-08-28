@@ -47,23 +47,23 @@
 
 @interface CCHMapClusterController()<MKMapViewDelegate>
 
-@property (nonatomic, strong) CCHMapTree *allAnnotationsMapTree;
-@property (nonatomic, strong) CCHMapTree *visibleAnnotationsMapTree;
-@property (nonatomic, strong) NSOperationQueue *backgroundQueue;
-@property (nonatomic, strong) MKMapView *mapView;
-@property (nonatomic, strong) CCHMapViewDelegateProxy *mapViewDelegateProxy;
-@property (nonatomic, strong) id<MKAnnotation> annotationToSelect;
-@property (nonatomic, strong) CCHMapClusterAnnotation *mapClusterAnnotationToSelect;
-@property (nonatomic, assign) MKCoordinateSpan regionSpanBeforeChange;
-@property (nonatomic, assign, getter = isRegionChanging) BOOL regionChanging;
-@property (nonatomic, strong) id<CCHMapClusterer> strongClusterer;
-@property (nonatomic, strong) id<CCHMapAnimator> strongAnimator;
+@property (nonatomic) CCHMapTree *allAnnotationsMapTree;
+@property (nonatomic) CCHMapTree *visibleAnnotationsMapTree;
+@property (nonatomic) NSOperationQueue *backgroundQueue;
+@property (nonatomic) MKMapView *mapView;
+@property (nonatomic) CCHMapViewDelegateProxy *mapViewDelegateProxy;
+@property (nonatomic) id<MKAnnotation> annotationToSelect;
+@property (nonatomic) CCHMapClusterAnnotation *mapClusterAnnotationToSelect;
+@property (nonatomic) MKCoordinateSpan regionSpanBeforeChange;
+@property (nonatomic, getter = isRegionChanging) BOOL regionChanging;
+@property (nonatomic) id<CCHMapClusterer> strongClusterer;
+@property (nonatomic) id<CCHMapAnimator> strongAnimator;
 
 @end
 
 @implementation CCHMapClusterController
 
-- (id)initWithMapView:(MKMapView *)mapView
+- (instancetype)initWithMapView:(MKMapView *)mapView
 {
     self = [super init];
     if (self) {
@@ -74,6 +74,7 @@
         _allAnnotationsMapTree = [[CCHMapTree alloc] initWithNodeCapacity:NODE_CAPACITY minLatitude:WORLD_MIN_LAT maxLatitude:WORLD_MAX_LAT minLongitude:WORLD_MIN_LON maxLongitude:WORLD_MAX_LON];
         _visibleAnnotationsMapTree = [[CCHMapTree alloc] initWithNodeCapacity:NODE_CAPACITY minLatitude:WORLD_MIN_LAT maxLatitude:WORLD_MAX_LAT minLongitude:WORLD_MIN_LON maxLongitude:WORLD_MAX_LON];
         _backgroundQueue = [[NSOperationQueue alloc] init];
+        _backgroundQueue.maxConcurrentOperationCount = 1;   // sync access to allAnnotationsMapTree & visibleAnnotationsMapTree
         
         if ([mapView.delegate isKindOfClass:CCHMapViewDelegateProxy.class]) {
             CCHMapViewDelegateProxy *delegateProxy = (CCHMapViewDelegateProxy *)mapView.delegate;
@@ -120,7 +121,7 @@
     return CCHMapClusterControllerZoomLevelForRegion(region.center.longitude, region.span.longitudeDelta, self.mapView.bounds.size.width);
 }
 
-- (void)sync
+- (void)cancelAllClusterOperations
 {
     NSOperationQueue *backgroundQueue = self.backgroundQueue;
     for (NSOperation *operation in backgroundQueue.operations) {
@@ -128,12 +129,11 @@
             [operation cancel];
         }
     }
-    [backgroundQueue waitUntilAllOperationsAreFinished];
 }
 
 - (void)addAnnotations:(NSArray *)annotations withCompletionHandler:(void (^)())completionHandler
 {
-    [self sync];
+    [self cancelAllClusterOperations];
     
     [self.backgroundQueue addOperationWithBlock:^{
         BOOL updated = [self.allAnnotationsMapTree addAnnotations:annotations];
@@ -149,7 +149,7 @@
 
 - (void)removeAnnotations:(NSArray *)annotations withCompletionHandler:(void (^)())completionHandler
 {
-    [self sync];
+    [self cancelAllClusterOperations];
     
     [self.backgroundQueue addOperationWithBlock:^{
         BOOL updated = [self.allAnnotationsMapTree removeAnnotations:annotations];
@@ -165,20 +165,21 @@
 
 - (void)updateAnnotationsWithCompletionHandler:(void (^)())completionHandler
 {
-    [self sync];
+    [self cancelAllClusterOperations];
     
     CCHMapClusterOperation *operation = [[CCHMapClusterOperation alloc] initWithMapView:self.mapView
                                                                                cellSize:self.cellSize
                                                                            marginFactor:self.marginFactor
                                                         reuseExistingClusterAnnotations:self.reuseExistingClusterAnnotations
-                                                              maxZoomLevelForClustering:self.maxZoomLevelForClustering];
-    operation.completionHandler = completionHandler;
+                                                              maxZoomLevelForClustering:self.maxZoomLevelForClustering
+                                                        minUniqueLocationsForClustering:self.minUniqueLocationsForClustering];
     operation.allAnnotationsMapTree = self.allAnnotationsMapTree;
     operation.visibleAnnotationsMapTree = self.visibleAnnotationsMapTree;
     operation.clusterer = self.clusterer;
     operation.animator = self.animator;
-    operation.delegate = self.delegate;
+    operation.clusterControllerDelegate = self.delegate;
     operation.clusterController = self;
+    operation.completionBlock = completionHandler;
     
     [self.backgroundQueue addOperation:operation];
 
@@ -206,7 +207,7 @@
     
     // Add polygons outlining each cell
     CCHMapClusterControllerEnumerateCells(gridMapRect, cellMapSize, ^(MKMapRect cellMapRect) {
-        cellMapRect.origin.x -= MKMapSizeWorld.width;  // fixes issue when view port spans 180th meridian
+//        cellMapRect.origin.x -= MKMapSizeWorld.width;  // fixes issue when view port spans 180th meridian
         
         MKMapPoint points[4];
         points[0] = MKMapPointMake(MKMapRectGetMinX(cellMapRect), MKMapRectGetMinY(cellMapRect));

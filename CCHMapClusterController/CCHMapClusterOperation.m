@@ -32,23 +32,32 @@
 #import "CCHMapAnimator.h"
 #import "CCHMapClusterControllerDelegate.h"
 
+#define fequal(a, b) (fabs((a) - (b)) < __FLT_EPSILON__)
+
 @interface CCHMapClusterOperation()
 
-@property (nonatomic, strong) MKMapView *mapView;
-@property (nonatomic, assign) double cellMapSize;
-@property (nonatomic, assign) double marginFactor;
-@property (nonatomic, assign) MKMapRect mapViewVisibleMapRect;
-@property (nonatomic, assign) MKCoordinateRegion mapViewRegion;
-@property (nonatomic, assign) CGFloat mapViewWidth;
+@property (nonatomic) MKMapView *mapView;
+@property (nonatomic) double cellMapSize;
+@property (nonatomic) double marginFactor;
+@property (nonatomic) MKMapRect mapViewVisibleMapRect;
+@property (nonatomic) MKCoordinateRegion mapViewRegion;
+@property (nonatomic) CGFloat mapViewWidth;
 @property (nonatomic, copy) NSArray *mapViewAnnotations;
-@property (nonatomic, assign) BOOL reuseExistingClusterAnnotations;
-@property (nonatomic, assign) double maxZoomLevelForClustering;
+@property (nonatomic) BOOL reuseExistingClusterAnnotations;
+@property (nonatomic) double maxZoomLevelForClustering;
+@property (nonatomic) NSUInteger minUniqueLocationsForClustering;
+
+@property (nonatomic, getter = isExecuting) BOOL executing;
+@property (nonatomic, getter = isFinished) BOOL finished;
 
 @end
 
 @implementation CCHMapClusterOperation
 
-- (id)initWithMapView:(MKMapView *)mapView cellSize:(double)cellSize marginFactor:(double)marginFactor reuseExistingClusterAnnotations:(BOOL)reuseExistingClusterAnnotation maxZoomLevelForClustering:(double)maxZoomLevelForClustering
+@synthesize executing = _executing;
+@synthesize finished = _finished;
+
+- (instancetype)initWithMapView:(MKMapView *)mapView cellSize:(double)cellSize marginFactor:(double)marginFactor reuseExistingClusterAnnotations:(BOOL)reuseExistingClusterAnnotation maxZoomLevelForClustering:(double)maxZoomLevelForClustering minUniqueLocationsForClustering:(NSUInteger)minUniqueLocationsForClustering
 {
     self = [super init];
     if (self) {
@@ -61,6 +70,10 @@
         _mapViewAnnotations = mapView.annotations;
         _reuseExistingClusterAnnotations = reuseExistingClusterAnnotation;
         _maxZoomLevelForClustering = maxZoomLevelForClustering;
+        _minUniqueLocationsForClustering = minUniqueLocationsForClustering;
+        
+        _executing = NO;
+        _finished = NO;
     }
     
     return self;
@@ -84,11 +97,13 @@
     return gridMapRect;
 }
 
-- (void)main
+- (void)start
 {
+    self.executing = YES;
+    
     double zoomLevel = CCHMapClusterControllerZoomLevelForRegion(self.mapViewRegion.center.longitude, self.mapViewRegion.span.longitudeDelta, self.mapViewWidth);
-    BOOL disableClustering = (zoomLevel >= self.maxZoomLevelForClustering);
-    BOOL respondsToSelector = [_delegate respondsToSelector:@selector(mapClusterController:willReuseMapClusterAnnotation:)];
+    BOOL disableClustering = (zoomLevel > self.maxZoomLevelForClustering);
+    BOOL respondsToSelector = [_clusterControllerDelegate respondsToSelector:@selector(mapClusterController:willReuseMapClusterAnnotation:)];
     
     // For each cell in the grid, pick one cluster annotation to show
     MKMapRect gridMapRect = [self.class gridMapRectForMapRect:self.mapViewVisibleMapRect withCellMapSize:self.cellMapSize marginFactor:self.marginFactor];
@@ -97,39 +112,51 @@
         NSSet *allAnnotationsInCell = [_allAnnotationsMapTree annotationsInMapRect:cellMapRect];
         
         if (allAnnotationsInCell.count > 0) {
-            NSMutableSet *visibleAnnotationsInCell = [NSMutableSet setWithSet:[_visibleAnnotationsMapTree annotationsInMapRect:cellMapRect]];
-
-            BOOL disableClusterer;
+            BOOL annotationSetsAreUniqueLocations;
             NSArray *annotationSets;
             if (disableClustering) {
-                annotationSets = CCHMapClusterControllerAnnotationSetsByUniqueLocations(allAnnotationsInCell);
-                disableClusterer = YES;
+                // Create annotation for each unique location because clustering is disabled
+                annotationSets = CCHMapClusterControllerAnnotationSetsByUniqueLocations(allAnnotationsInCell, NSUIntegerMax);
+                annotationSetsAreUniqueLocations = YES;
             } else {
-                annotationSets = @[allAnnotationsInCell];
-                disableClusterer = CCHMapClusterControllerIsUniqueLocation(allAnnotationsInCell);
+                NSUInteger max = _minUniqueLocationsForClustering > 1 ? _minUniqueLocationsForClustering - 1 : 1;
+                annotationSets = CCHMapClusterControllerAnnotationSetsByUniqueLocations(allAnnotationsInCell, max);
+                if (annotationSets) {
+                    // Create annotation for each unique location because there are too few locations for clustering
+                    annotationSetsAreUniqueLocations = YES;
+                } else {
+                    // Create one annotation for entire cell
+                    annotationSets = @[allAnnotationsInCell];
+                    annotationSetsAreUniqueLocations = NO;
+                }
             }
 
+            NSMutableSet *visibleAnnotationsInCell = [NSMutableSet setWithSet:[_visibleAnnotationsMapTree annotationsInMapRect:cellMapRect]];
             for (NSSet *annotationSet in annotationSets) {
-
                 CLLocationCoordinate2D coordinate;
-                if (disableClusterer) {
+                if (annotationSetsAreUniqueLocations) {
                     coordinate = [annotationSet.anyObject coordinate];
                 } else {
                     coordinate = [_clusterer mapClusterController:_clusterController coordinateForAnnotations:annotationSet inMapRect:cellMapRect];
                 }
                 
                 CCHMapClusterAnnotation *annotationForCell;
-                
                 if (_reuseExistingClusterAnnotations) {
                     // Check if an existing cluster annotation can be reused
                     annotationForCell = CCHMapClusterControllerFindVisibleAnnotation(annotationSet, visibleAnnotationsInCell);
+                    
+                    // For unique locations, coordinate has to match as well
+                    if (annotationForCell && annotationSetsAreUniqueLocations) {
+                        BOOL coordinateMatches = fequal(coordinate.latitude, annotationForCell.coordinate.latitude) && fequal(coordinate.longitude, annotationForCell.coordinate.longitude);
+                        annotationForCell = coordinateMatches ? annotationForCell : nil;
+                    }
                 }
                 
                 if (annotationForCell == nil) {
                     // Create new cluster annotation
                     annotationForCell = [[CCHMapClusterAnnotation alloc] init];
                     annotationForCell.mapClusterController = _clusterController;
-                    annotationForCell.delegate = _delegate;
+                    annotationForCell.delegate = _clusterControllerDelegate;
                     annotationForCell.annotations = annotationSet;
                     annotationForCell.coordinate = coordinate;
                 } else {
@@ -137,13 +164,13 @@
                     [visibleAnnotationsInCell removeObject:annotationForCell];
                     annotationForCell.annotations = annotationSet;
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        if (disableClusterer) {
+                        if (annotationSetsAreUniqueLocations) {
                             annotationForCell.coordinate = coordinate;
                         }
                         annotationForCell.title = nil;
                         annotationForCell.subtitle = nil;
                         if (respondsToSelector) {
-                            [_delegate mapClusterController:_clusterController willReuseMapClusterAnnotation:annotationForCell];
+                            [_clusterControllerDelegate mapClusterController:_clusterController willReuseMapClusterAnnotation:annotationForCell];
                         }
                     });
                 }
@@ -173,11 +200,24 @@
         [self.animator mapClusterController:self.clusterController willRemoveAnnotations:annotationsToRemove withCompletionHandler:^{
             [self.mapView removeAnnotations:annotationsToRemove];
             
-            if (self.completionHandler) {
-                self.completionHandler();
-            }
+            self.executing = NO;
+            self.finished = YES;
         }];
     });
+}
+
+- (void)setExecuting:(BOOL)executing
+{
+    [self willChangeValueForKey:@"isExecuting"];
+    _executing = YES;
+    [self didChangeValueForKey:@"isExecuting"];
+}
+
+- (void)setFinished:(BOOL)finished
+{
+    [self willChangeValueForKey:@"isFinished"];
+    _finished = YES;
+    [self didChangeValueForKey:@"isFinished"];
 }
 
 @end

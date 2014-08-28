@@ -31,14 +31,14 @@
 @interface CCHMapTreeUnsafeMutableArray()
 
 @property (nonatomic, assign) id __unsafe_unretained *objects;
-@property (nonatomic, assign) NSUInteger numObjects;
-@property (nonatomic, assign) NSUInteger capacity;
+@property (nonatomic) NSUInteger numObjects;
+@property (nonatomic) NSUInteger capacity;
 
 @end
 
 @implementation CCHMapTreeUnsafeMutableArray
 
-- (id)initWithCapacity:(NSUInteger)capacity
+- (instancetype)initWithCapacity:(NSUInteger)capacity
 {
     self = [super init];
     if (self) {

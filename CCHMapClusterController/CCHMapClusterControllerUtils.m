@@ -34,7 +34,6 @@
 
 MKMapRect CCHMapClusterControllerAlignMapRectToCellSize(MKMapRect mapRect, double cellSize)
 {
-    NSCAssert(cellSize != 0, @"Invalid map length");
     if (cellSize == 0) {
         return MKMapRectNull;
     }
@@ -89,7 +88,6 @@ double CCHMapClusterControllerMapLengthForLength(MKMapView *mapView, NSView *vie
 
 double CCHMapClusterControllerAlignMapLengthToWorldWidth(double mapLength)
 {
-    NSCAssert(mapLength != 0, @"Invalid map length");
     if (mapLength == 0) {
         return 0;
     }
@@ -281,18 +279,29 @@ static NSString *hashForCoordinate(CLLocationCoordinate2D coordinate, NSUInteger
     return geohashAsString;
 }
 
-NSArray *CCHMapClusterControllerAnnotationSetsByUniqueLocations(NSSet *annotations)
+NSArray *CCHMapClusterControllerAnnotationSetsByUniqueLocations(NSSet *annotations, NSUInteger maxUniqueLocations)
 {
-    NSMutableDictionary *annotationsByGeohash = [NSMutableDictionary dictionary];
+    NSMutableDictionary *annotationsByGeohash;
     
-    for (id<MKAnnotation> annotation in annotations) {
-        NSString *geohash = hashForCoordinate(annotation.coordinate, GEOHASH_LENGTH);
-        NSMutableSet *annotationsAtLocation = [annotationsByGeohash objectForKey:geohash];
-        if (!annotationsAtLocation) {
-            annotationsAtLocation = [NSMutableSet set];
+    if (maxUniqueLocations > 0) {
+        annotationsByGeohash = [NSMutableDictionary dictionary];
+        
+        for (id<MKAnnotation> annotation in annotations) {
+            // Add annotation to unique locations
+            NSString *geohash = hashForCoordinate(annotation.coordinate, GEOHASH_LENGTH);
+            NSMutableSet *annotationsAtLocation = [annotationsByGeohash objectForKey:geohash];
+            if (!annotationsAtLocation) {
+                annotationsAtLocation = [NSMutableSet set];
+            }
+            [annotationsAtLocation addObject:annotation];
+            [annotationsByGeohash setObject:annotationsAtLocation forKey:geohash];
+            
+            // Return nil if max has been reached
+            if (annotationsByGeohash.count > maxUniqueLocations) {
+                annotationsByGeohash = nil;
+                break;
+            }
         }
-        [annotationsAtLocation addObject:annotation];
-        [annotationsByGeohash setObject:annotationsAtLocation forKey:geohash];
     }
     
     return [annotationsByGeohash allValues];

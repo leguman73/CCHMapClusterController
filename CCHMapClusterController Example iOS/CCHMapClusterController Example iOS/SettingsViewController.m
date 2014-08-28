@@ -11,8 +11,6 @@
 #import "Settings.h"
 
 #define SECTION_GENERAL 0
-#define SECTION_GENERAL_ROW_CELL_SIZE 1
-#define SECTION_GENERAL_ROW_MARGIN_FACTOR 2
 #define SECTION_DATA_SET 1
 #define SECTION_CLUSTERER 2
 #define SECTION_ANIMATOR 3
@@ -22,12 +20,16 @@
 @property (weak, nonatomic) IBOutlet UITableViewCell *debuggingEnabledTableViewCell;
 @property (weak, nonatomic) IBOutlet UITableViewCell *cellSizeTableViewCell;
 @property (weak, nonatomic) IBOutlet UITableViewCell *marginFactorTableViewCell;
+@property (weak, nonatomic) IBOutlet UITableViewCell *maxZoomLevelTableViewCell;
+@property (weak, nonatomic) IBOutlet UITableViewCell *minUniqueLocationsTableViewCell;
 @property (weak, nonatomic) IBOutlet UITableViewCell *groupingEnabledTableViewCell;
 
-@property (nonatomic, strong) UISwitch *debuggingEnabledSwitch;
-@property (nonatomic, strong) UIStepper *cellSizeStepper;
-@property (nonatomic, strong) UIStepper *marginFactorStepper;
-@property (nonatomic, strong) UISwitch *groupingEnabledSwitch;
+@property (nonatomic) UISwitch *debuggingEnabledSwitch;
+@property (nonatomic) UIStepper *cellSizeStepper;
+@property (nonatomic) UIStepper *marginFactorStepper;
+@property (nonatomic) UIStepper *maxZoomLevelStepper;
+@property (nonatomic) UIStepper *minUniqueLocationsStepper;
+@property (nonatomic) UISwitch *groupingEnabledSwitch;
 
 @end
 
@@ -42,7 +44,7 @@
     self.debuggingEnabledSwitch.on = self.settings.isDebuggingEnabled;
     self.debuggingEnabledTableViewCell.accessoryView = self.debuggingEnabledSwitch;
     
-    self.cellSizeStepper = [self stepperForRow:SECTION_GENERAL_ROW_CELL_SIZE];
+    self.cellSizeStepper = [self newStepper];
     self.cellSizeStepper.minimumValue = 20;
     self.cellSizeStepper.maximumValue = 200;
     self.cellSizeStepper.stepValue = 10;
@@ -50,7 +52,7 @@
     self.cellSizeTableViewCell.accessoryView = self.cellSizeStepper;
     self.cellSizeTableViewCell.detailTextLabel.text = [NSString stringWithFormat:@"%.1f", self.cellSizeStepper.value];
     
-    self.marginFactorStepper = [self stepperForRow:SECTION_GENERAL_ROW_MARGIN_FACTOR];
+    self.marginFactorStepper = [self newStepper];
     self.marginFactorStepper.minimumValue = -0.2;
     self.marginFactorStepper.maximumValue = 1.5;
     self.marginFactorStepper.stepValue = 0.1;
@@ -69,16 +71,31 @@
     // SECTION_CLUSTERER
     NSIndexPath *clustererIndexPath = [NSIndexPath indexPathForRow:(NSInteger)self.settings.clusterer inSection:SECTION_CLUSTERER];
     [self selectIndexPath:clustererIndexPath];
+    
+    self.maxZoomLevelStepper = [self newStepper];
+    self.maxZoomLevelStepper.minimumValue = 5;
+    self.maxZoomLevelStepper.maximumValue = 25;
+    self.maxZoomLevelStepper.stepValue = 1;
+    self.maxZoomLevelStepper.value = MIN(MAX(self.settings.maxZoomLevelForClustering, self.maxZoomLevelStepper.minimumValue), self.maxZoomLevelStepper.maximumValue);
+    self.maxZoomLevelTableViewCell.accessoryView = self.maxZoomLevelStepper;
+    self.maxZoomLevelTableViewCell.detailTextLabel.text = [NSString stringWithFormat:@"%.1f", self.maxZoomLevelStepper.value];
+
+    self.minUniqueLocationsStepper = [self newStepper];
+    self.minUniqueLocationsStepper.minimumValue = 2;
+    self.minUniqueLocationsStepper.maximumValue = 10;
+    self.minUniqueLocationsStepper.stepValue = 1;
+    self.minUniqueLocationsStepper.value = MIN(MAX(self.settings.minUniqueLocationsForClustering, self.minUniqueLocationsStepper.minimumValue), self.minUniqueLocationsStepper.maximumValue);
+    self.minUniqueLocationsTableViewCell.accessoryView = self.minUniqueLocationsStepper;
+    self.minUniqueLocationsTableViewCell.detailTextLabel.text = [NSString stringWithFormat:@"%.1f", self.minUniqueLocationsStepper.value];
 
     // SECTION_ANIMATOR
     NSIndexPath *animatorIndexPath = [NSIndexPath indexPathForRow:(NSInteger)self.settings.clusterer inSection:SECTION_ANIMATOR];
     [self selectIndexPath:animatorIndexPath];
 }
 
-- (UIStepper *)stepperForRow:(NSInteger)row
+- (UIStepper *)newStepper
 {
     UIStepper *stepper = [[UIStepper alloc] init];
-    stepper.tag = row;
     [stepper addTarget:self action:@selector(stepperValueChanged:) forControlEvents:UIControlEventValueChanged];
     
     return stepper;
@@ -86,7 +103,8 @@
 
 - (void)stepperValueChanged:(UIStepper *)sender
 {
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:sender.tag inSection:SECTION_GENERAL];
+    CGPoint point = [self.tableView convertPoint:CGPointMake(0, 0) fromView:sender];
+    NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:point];
     UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
     cell.detailTextLabel.text = [NSString stringWithFormat:@"%.1f", sender.value];
 }
@@ -146,6 +164,8 @@
     self.settings.groupingEnabled = self.groupingEnabledSwitch.on;
     self.settings.dataSet = (SettingsDataSet)[self selectedRowForSection:SECTION_DATA_SET];
     self.settings.clusterer = (SettingsClusterer)[self selectedRowForSection:SECTION_CLUSTERER];
+    self.settings.maxZoomLevelForClustering = self.maxZoomLevelStepper.value;
+    self.settings.minUniqueLocationsForClustering = (NSUInteger)self.minUniqueLocationsStepper.value;
     self.settings.animator = (SettingsAnimator)[self selectedRowForSection:SECTION_ANIMATOR];
 
     if (self.completionBlock) {

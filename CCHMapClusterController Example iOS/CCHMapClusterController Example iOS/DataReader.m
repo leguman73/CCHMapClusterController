@@ -17,13 +17,13 @@
 
 @interface DataReader()
 
-@property (nonatomic, strong) NSOperationQueue *operationQueue;
+@property (nonatomic) NSOperationQueue *operationQueue;
 
 @end
 
 @implementation DataReader
 
-- (id)init
+- (instancetype)init
 {
     self = [super init];
     if (self) {

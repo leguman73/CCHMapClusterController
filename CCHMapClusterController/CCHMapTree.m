@@ -29,20 +29,20 @@
 
 @interface CCHMapTree()
 
-@property (nonatomic, strong) NSMutableSet *mutableAnnotations;
-@property (nonatomic, assign) CCHMapTreeNode *root;
-@property (nonatomic, assign) NSUInteger nodeCapacity;
+@property (nonatomic) NSMutableSet *mutableAnnotations;
+@property (nonatomic) CCHMapTreeNode *root;
+@property (nonatomic) NSUInteger nodeCapacity;
 
 @end
 
 @implementation CCHMapTree
 
-- (id)init
+- (instancetype)init
 {
     return [self initWithNodeCapacity:10 minLatitude:-85.0 maxLatitude:85.0 minLongitude:-180.0 maxLongitude:180.0];
 }
 
-- (id)initWithNodeCapacity:(NSUInteger)nodeCapacity minLatitude:(double)minLatitude maxLatitude:(double)maxLatitude minLongitude:(double)minLongitude maxLongitude:(double)maxLongitude
+- (instancetype)initWithNodeCapacity:(NSUInteger)nodeCapacity minLatitude:(double)minLatitude maxLatitude:(double)maxLatitude minLongitude:(double)minLongitude maxLongitude:(double)maxLongitude
 {
     self = [super init];
     if (self) {

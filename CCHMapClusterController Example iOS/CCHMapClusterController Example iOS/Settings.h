@@ -23,14 +23,16 @@ typedef enum {
     SettingsAnimatorFadeInOut
 } SettingsAnimator;
 
-@interface Settings : NSObject
+@interface Settings : NSObject<NSCopying>
 
-@property (nonatomic, assign, getter = isDebuggingEnabled) BOOL debuggingEnabled;
-@property (nonatomic, assign) double cellSize;
-@property (nonatomic, assign) double marginFactor;
-@property (nonatomic, assign, getter = isGroupingEnabled) BOOL groupingEnabled;
-@property (nonatomic, assign) SettingsDataSet dataSet;
-@property (nonatomic, assign) SettingsClusterer clusterer;
-@property (nonatomic, assign) SettingsAnimator animator;
+@property (nonatomic, getter = isDebuggingEnabled) BOOL debuggingEnabled;
+@property (nonatomic) double cellSize;
+@property (nonatomic) double marginFactor;
+@property (nonatomic) SettingsDataSet dataSet;
+@property (nonatomic, getter = isGroupingEnabled) BOOL groupingEnabled;
+@property (nonatomic) SettingsClusterer clusterer;
+@property (nonatomic) double maxZoomLevelForClustering;
+@property (nonatomic) NSUInteger minUniqueLocationsForClustering;
+@property (nonatomic) SettingsAnimator animator;
 
 @end
